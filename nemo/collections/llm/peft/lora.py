@@ -25,6 +25,9 @@ from nemo.utils.import_utils import safe_import_from
 TEColumnParallelLinear, HAVE_TE_COL_LINEAR = safe_import_from(
     "megatron.core.transformer.custom_layers.transformer_engine", "TEColumnParallelLinear"
 )
+TELayerNormColumnParallelLinear, HAVE_TE_LAYER_NORM_COL_LINEAR = safe_import_from(
+    "megatron.core.transformer.custom_layers.transformer_engine", "TELayerNormColumnParallelLinear"
+)
 TERowParallelLinear, HAVE_TE_ROW_LINEAR = safe_import_from(
     "megatron.core.transformer.custom_layers.transformer_engine", "TERowParallelLinear"
 )
@@ -83,6 +86,7 @@ class LoRA(PEFT):
         dropout (float): Dropout rate for the low-rank projection. Defaults to 0.0.
         dropout_position (Literal['pre', 'post'], optional): Position for applying dropout.
             Can be 'pre' (before the low-rank projection) or 'post' (after). Defaults to 'post'.
+        a2a_experimental (bool): Enables the experimental All-to-All (A2A) communication strategy. Defaults to False.
 
     Example:
     --------
@@ -97,8 +101,6 @@ class LoRA(PEFT):
         Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., & Chen, W. (2021).
         LoRA: Low-Rank Adaptation of Large Language Models. arXiv preprint arXiv:2106.09685.
         https://arxiv.org/abs/2106.09685
-
-    )
     """
 
     target_modules: List[str] = field(
@@ -110,6 +112,7 @@ class LoRA(PEFT):
     dropout_position: Literal['pre', 'post'] = 'post'
     lora_A_init_method: str = "xavier"
     lora_B_init_method: str = "zero"
+    a2a_experimental: bool = False
 
     def transform(self, m: nn.Module, name=None, prefix=None):
         """
@@ -133,6 +136,9 @@ class LoRA(PEFT):
                 if HAVE_TE_COL_LINEAR and isinstance(m, TEColumnParallelLinear):
                     # m.in_features and m.out_features are divided by tp_size already,
                     # but in_features and out_features passed to ParallelLinearAdapter are not.
+                    in_features = m.in_features
+                    out_features = m.out_features * tp_size
+                elif HAVE_TE_LAYER_NORM_COL_LINEAR and isinstance(m, TELayerNormColumnParallelLinear):
                     in_features = m.in_features
                     out_features = m.out_features * tp_size
                 else:
@@ -169,6 +175,7 @@ class LoRA(PEFT):
                 dropout_position=self.dropout_position,
                 model_parallel_config=getattr(m, "config", None),
                 alpha=self.alpha,
+                a2a_experimental=self.a2a_experimental,
             )
             return AdapterParallelAdd(m, adapter)
         return m

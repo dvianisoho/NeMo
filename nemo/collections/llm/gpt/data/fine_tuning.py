@@ -71,6 +71,7 @@ class FineTuningDataModule(pl.LightningDataModule):
         persistent_workers: bool = False,
         pad_to_max_length: bool = False,
         packed_sequence_size: int = -1,
+        **dataset_kwargs,
     ):
         super().__init__()
         self.seq_length = seq_length
@@ -89,6 +90,7 @@ class FineTuningDataModule(pl.LightningDataModule):
         self.pad_to_max_length = pad_to_max_length
         self.packed_sequence_size = packed_sequence_size
         self._adjust_batch_sizes_for_packed_sequence()
+        self.dataset_kwargs = dataset_kwargs
 
     def _adjust_batch_sizes_for_packed_sequence(self):
         if self.packed_sequence_size > 0 and self.micro_batch_size > 1:
@@ -105,17 +107,28 @@ class FineTuningDataModule(pl.LightningDataModule):
             self.micro_batch_size = 1
 
     def prepare_data(self) -> None:
-        if self.packed_sequence_size > 0 and not self.train_path_packed.is_file():
+        if self.packed_sequence_size > 0:
             from nemo.collections.llm.gpt.data.packed_sequence import prepare_packed_sequence_data
 
-            prepare_packed_sequence_data(
-                input_path=self.train_path,
-                output_path=self.train_path_packed,
-                packed_sequence_size=self.packed_sequence_size,
-                tokenizer=self.tokenizer,
-                max_seq_length=self.seq_length,
-                seed=self.seed,
-            )
+            if not self.train_path_packed.is_file():
+                prepare_packed_sequence_data(
+                    input_path=self.train_path,
+                    output_path=self.train_path_packed,
+                    packed_sequence_size=self.packed_sequence_size,
+                    tokenizer=self.tokenizer,
+                    max_seq_length=self.seq_length,
+                    seed=self.seed,
+                )
+
+            if not self.validation_path_packed.is_file():
+                prepare_packed_sequence_data(
+                    input_path=self.validation_path,
+                    output_path=self.validation_path_packed,
+                    packed_sequence_size=self.packed_sequence_size,
+                    tokenizer=self.tokenizer,
+                    max_seq_length=self.seq_length,
+                    seed=self.seed,
+                )
 
     def setup(self, stage: str):
         self.data_sampler = MegatronDataSampler(
@@ -136,15 +149,17 @@ class FineTuningDataModule(pl.LightningDataModule):
                 self.train_path if self.packed_sequence_size <= 0 else self.train_path_packed,
                 max_num_samples=self.max_train_samples,
                 pad_to_max_length=self.pad_to_max_length,
+                **self.dataset_kwargs,
             )
         )
 
     def val_dataloader(self) -> DataLoader:
         return self._create_dataloader(
             self._create_dataset(
-                self.validation_path,
+                self.validation_path if self.packed_sequence_size <= 0 else self.validation_path_packed,
                 is_test=True,
                 pad_to_max_length=self.pad_to_max_length,
+                **self.dataset_kwargs,
             ),
         )
 
@@ -163,7 +178,7 @@ class FineTuningDataModule(pl.LightningDataModule):
         return create_sft_dataset(
             path,
             tokenizer=self.tokenizer,
-            seq_length=(self.seq_length if is_test or self.packed_sequence_size <= 0 else self.packed_sequence_size),
+            seq_length=self.packed_sequence_size if self.packed_sequence_size > 0 else self.seq_length,
             memmap_workers=self.memmap_workers,
             seed=self.seed,
             is_test=is_test,
@@ -194,6 +209,13 @@ class FineTuningDataModule(pl.LightningDataModule):
     @property
     def validation_path(self) -> Path:
         return self.dataset_root / "validation.jsonl"
+
+    @property
+    def validation_path_packed(self) -> Path:
+        if self.packed_sequence_size > 0:
+            return self.dataset_root / f"validation_packed{self.packed_sequence_size}.npy"
+        else:
+            raise ValueError("`validation_path_packed` invalid since packed sequence size is not specified.")
 
     @property
     def test_path(self) -> Path:
