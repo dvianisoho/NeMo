@@ -186,8 +186,6 @@ def main(cluster_cfg):
         num_nodes = cluster_cfg.get('num_nodes', merged_config['trainer'].get('num_nodes', 1))
         cluster_cfg = OmegaConf.to_object(cluster_cfg)
 
-        print("NUM GPUS", num_gpus)
-
         run_utils.add_task(exp,
             cmd=cmd,
             task_name=job_name,
