@@ -120,7 +120,7 @@ export HF_TOKEN={HF_TOKEN} && \
 export WANDB_API_KEY={WANDB} && \
 find /results/ -name '*-unfinished' -type f -delete && \ 
 cd {cluster_script_dir} && \
-python -u -B {cluster_script_path} --config-path "/results" --config-name "{config_name}" && \
+python -u -B {cluster_script_path} --config-path "/results/configs" --config-name "{config_name}" && \
 cd /results && \
 ls -l;
 """
@@ -173,10 +173,12 @@ def main(cluster_cfg):
             raise ValueError("Experiment name not provided in the run config file (`exp_name`)) or the cluster config (inside exp_manager.name)")
 
     with run.Experiment(exp_name) as exp:
-        cmd = get_execution_script(cluster_script_path, "config.yaml", merged_config, cluster_cfg)
+        config_name = f"{exp_name}_config.yaml"
+        cmd = get_execution_script(cluster_script_path, config_name, merged_config, cluster_cfg)
 
         # Create the remote config file
-        run_utils.create_remote_config(merged_config, "config.yaml", results_dir, cluster_cfg)
+        config_dir = os.path.join(results_dir, 'configs')
+        run_utils.create_remote_config(merged_config, config_name, config_dir, cluster_cfg)
 
         job_name = f"{exp_name}_job"
         num_gpus = cluster_cfg.get('num_gpus', merged_config['trainer']['devices'])
