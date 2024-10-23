@@ -159,16 +159,17 @@ def check_config_mount_paths(script_config, cluster_config):
             unmounted_path = run_utils.get_unmounted_filepath(cluster_cfg, v)
             run_utils.check_remote_mount_directories(unmounted_path, cluster_cfg)
 
-        # elif "ais://" in v and ais_endpoint is not None:  # if the value is a string, check if its an ais path
-        #     # Try to import ais module
-        #     try:
-        #         from aistore.sdk import Client
-        #
-        #         ais_client = Client(ais_endpoint)
-        #
-        #
-        #     except ImportError:
-        #         logging.warning("\nais module is not installed. Please install it to use ais paths.\n")
+        elif "ais://" in v and ais_endpoint is not None:  # if the value is a string, check if its an ais path
+            # Try to import ais module
+            try:
+                from aistore.sdk import Client
+
+                # Do actual data check for this ais path
+                ais_client = Client(ais_endpoint)
+                ais_client.fetch_object_by_url(v).head()
+
+            except ImportError:
+                logging.warning("\nais module is not installed. Please install it to use ais paths.\n")
 
     def check_mounted_path(cfg, cluster_cfg):
         if hasattr(cfg, 'items'):  # if the object is a dictionary
