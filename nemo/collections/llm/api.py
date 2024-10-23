@@ -293,8 +293,8 @@ def ptq(
     dataset_size: int = 512,
     batch_size: int = 64,
     seq_len: int = 128,
-	quantization_config: QuantizationConfig = default_quantization(),
-	export_config: ExportConfig = default_export(None),
+    quantization_config: QuantizationConfig = default_quantization(),
+    export_config: ExportConfig = default_export(None),
 ):
     """
     Applies Post-Training Quantization (PTQ) for a model using the specified quantization and export configs. It runs
